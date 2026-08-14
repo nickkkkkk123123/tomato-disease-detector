@@ -3,6 +3,7 @@ import torch
 import torchvision.transforms as transforms
 from PIL import Image
 import os
+import torchvision.models as models
 
 # ========== 页面配置 ==========
 st.set_page_config(
@@ -21,17 +22,6 @@ CLASSES = [
     "蜘蛛螨", "靶斑病", "黄曲叶病毒", "花叶病毒", "健康"
 ]
 
-# ========== 加载模型（缓存） ==========
-@st.cache_resource
-def load_model():
-    model_path = "best_model_multiclass.pth"
-    if not os.path.exists(model_path):
-        st.error(f"❌ 模型文件不存在: {model_path}")
-        return None
-    model = torch.load(model_path, map_location="cpu")
-    model.eval()
-    return model
-
 # ========== 图片预处理 ==========
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -40,21 +30,46 @@ transform = transforms.Compose([
                          std=[0.229, 0.224, 0.225])
 ])
 
+# ========== 加载模型（缓存） ==========
+@st.cache_resource
+def load_model():
+    model_path = "best_model_multiclass.pth"
+    if not os.path.exists(model_path):
+        st.error(f"❌ 模型文件不存在: {model_path}")
+        return None
+
+    # 1. 构建模型结构（与训练时一致）
+    model = models.mobilenet_v2(pretrained=False)
+    num_classes = 10
+    model.classifier[1] = torch.nn.Linear(model.last_channel, num_classes)
+
+    # 2. 加载权重
+    state_dict = torch.load(model_path, map_location='cpu')
+    # 支持两种格式：完整模型 或 state_dict
+    if isinstance(state_dict, dict):
+        model.load_state_dict(state_dict)
+    else:
+        # 如果保存的是完整模型，直接使用
+        model = state_dict
+
+    model.eval()
+    return model
+
 # ========== 预测函数 ==========
 def predict(image):
     model = load_model()
     if model is None:
         return None, None, None
-    
+
     img_tensor = transform(image).unsqueeze(0)
     with torch.no_grad():
         outputs = model(img_tensor)
         probs = torch.softmax(outputs, dim=1)[0]
-    
+
     max_prob, max_idx = torch.max(probs, dim=0)
     label = CLASSES[max_idx.item()]
     confidence = max_prob.item() * 100
-    
+
     all_probs = {CLASSES[i]: probs[i].item() * 100 for i in range(len(CLASSES))}
     return label, confidence, all_probs
 
@@ -67,13 +82,12 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert("RGB")
-    # 修复：使用 use_container_width 替代已废弃的 use_column_width
     st.image(image, caption="📸 上传的图片", use_container_width=True)
-    
+
     if st.button("🔍 开始识别", type="primary"):
         with st.spinner("🧠 模型推理中，请稍候..."):
             label, confidence, all_probs = predict(image)
-        
+
         if label is not None:
             st.success(f"✅ 预测结果：**{label}**（置信度：{confidence:.2f}%）")
             st.subheader("📊 所有类别概率分布")
