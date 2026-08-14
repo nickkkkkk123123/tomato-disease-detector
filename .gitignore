@@ -1,0 +1,12 @@
+# 创建 .gitignore
+echo "tomato_multiclass/" >> .gitignore
+echo "*.pth" >> .gitignore
+echo "*.pt" >> .gitignore
+echo "*.jks" >> .gitignore
+echo ".gradio/" >> .gitignore
+echo ".vscode/" >> .gitignore
+echo "test/" >> .gitignore
+echo "val/" >> .gitignore
+echo "train/" >> .gitignore
+echo "__pycache__/" >> .gitignore
+echo "*.pyc" >> .gitignore
